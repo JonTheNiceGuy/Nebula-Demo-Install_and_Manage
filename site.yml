@@ -1,0 +1,19 @@
+---
+- name: "Setup SSH"
+  hosts: vmmgmt1awx
+  gather_facts: false
+  tasks:
+  - setup:
+
+- name: "Ensure the Bastion is properly configured"
+  hosts: tag_Bastion_ip,Bastion_ip
+  gather_facts: false
+  tasks:
+  - include_role:
+      name: deliver_bastion
+
+- name: "Deliver Nebula to all Nebula hosts"
+  hosts: tag_Nebula_ip,Nebula_ip
+  tasks:
+  - include_role:
+      name: deploy_nebula

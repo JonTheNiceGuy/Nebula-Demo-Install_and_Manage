@@ -1,0 +1,110 @@
+---
+- name: Ensure all servers have Python installed
+  become: true
+  raw: test -e /usr/bin/python || (test -e /usr/bin/apt && apt -y install python || yum -y install python)
+  changed_when: false
+
+- name: Make target directories
+  become: true
+  file:
+    path: "{{ item }}"
+    recurse: yes
+    owner: root
+    group: root
+    mode: 0700
+  loop:
+  - /opt/Nebula
+  - /etc/Nebula
+  loop_control:
+    label: "{{ item }}"
+
+- name: Transfer binary to target /opt/Nebula
+  become: true
+  copy:
+    src: "/tmp/nebula{{ item }}"
+    dest: "/opt/Nebula/"
+    owner: root
+    group: root
+    mode: 0700
+  loop:
+    - ""
+    - "-cert"
+  loop_control:
+    label: "nebula{{ item }}"
+
+- name: Build SSH Host Keys
+  become: true
+  openssh_keypair:
+    path: /etc/Nebula/ssh_host_ed25519_key
+    type: ed25519
+    owner: root
+    group: root
+    mode: 0600
+
+- name: Build CA key
+  become: true
+  delegate_to: "{{ ca_server }}"
+  run_once: true
+  shell: 
+    cmd: "/opt/Nebula/nebula-cert ca -name {{ ansible_fqdn }} -duration 87600h"
+    chdir: /etc/Nebula
+    creates: /etc/Nebula/ca.crt
+
+- name: Show Nebula Client Certificate Commands
+  debug:
+    msg: "/opt/Nebula/nebula-cert sign -name {{ inventory_hostname }} -ip {{ nebula_ip }} -groups {{ ROLE_INTERNAL_nebula_groups | join(',') }}"
+  when: ROLE_INTERNAL_nebula_groups is defined and ROLE_INTERNAL_nebula_groups != '' and ROLE_INTERNAL_nebula_groups != []  
+
+- name: Create Nebula Client Certificate
+  become: true
+  delegate_to: "{{ ca_server }}"
+  shell:
+    cmd: "/opt/Nebula/nebula-cert sign -name {{ inventory_hostname }} -ip {{ nebula_ip }} -groups {{ ROLE_INTERNAL_nebula_groups | join(',') }}"
+    chdir: /etc/Nebula
+    creates: "/etc/Nebula/{{ inventory_hostname }}.crt"
+  when: ROLE_INTERNAL_nebula_groups is defined and ROLE_INTERNAL_nebula_groups != '' and ROLE_INTERNAL_nebula_groups != []
+
+- name: Read CA.crt, node.crt and node.key from ca_server
+  # Based on https://kapuablog.wordpress.com/2019/11/26/ansible-reading-a-remote-yaml-file/
+  become: true
+  delegate_to: "{{ ca_server }}"
+  command: "cat '/etc/Nebula/{{ item }}'"
+  changed_when: false
+  register: keymaterials
+  loop:
+  - ca.crt
+  - "{{ inventory_hostname }}.crt"
+  - "{{ inventory_hostname }}.key"
+
+- name: Transfer certificates to target /etc/Nebula
+  become: true
+  copy:
+    content: "{{ item.stdout }}"
+    dest: "/etc/Nebula/{{ item.item }}"
+    owner: root
+    group: root
+    mode: 0700
+  loop: "{{ keymaterials.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item | default('ERROR') }}"
+
+- name: Build config template
+  become: true
+  template:
+    dest: /etc/Nebula/config.yml
+    src: config.yml.j2
+    force: yes
+    owner: root
+    group: root
+    mode: 0600
+  notify: Restart Nebula
+
+- name: Create SystemD Service
+  become: true
+  copy:
+    src: ../files/nebula.service
+    dest: /etc/systemd/system/nebula.service
+    owner: root
+    group: root
+    mode: 0700
+  notify: SystemD Reload

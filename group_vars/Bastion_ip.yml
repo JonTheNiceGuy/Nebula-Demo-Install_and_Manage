@@ -1,0 +1,34 @@
+---
+regex_find_ec2_bastion_ip: '^(tag_Bastion_ip_)(\d+)[._](\d+)[._](\d+)[._](\d+)$'
+regex_find_ec2_bastion_user: '^(tag_Bastion_user_)(.*)$'
+regex_find_azure_bastion_ip: '^(Bastion_ip_)(\d+)[._](\d+)[._](\d+)[._](\d+)$'
+regex_find_azure_bastion_user: '^(Bastion_user_)(.*)$'
+group_based_bastion_user: |-
+  {%- for group_name in group_names | default([]) -%}
+    {%- if group_name is match(regex_find_ec2_bastion_user) -%}
+      {{ group_name | regex_replace(regex_find_ec2_bastion_user, '\2') }}
+    {%- elif group_name is match(regex_find_azure_bastion_user) -%}
+      {{ group_name | regex_replace(regex_find_azure_bastion_user, '\2') }}
+    {%- endif -%}
+  {%- endfor -%}
+bastion_user: |-
+  {%- if group_based_bastion_user | trim != '' -%}
+    {{ group_based_bastion_user }}
+  {%- else -%}
+    ubuntu
+  {%- endif -%}
+group_based_bastion_ip: |-
+  {%- for group_name in group_names | default([]) -%}
+    {%- if group_name is match(regex_find_ec2_bastion_ip) -%}
+      {{ group_name | regex_replace(regex_find_ec2_bastion_ip, '\2.\3.\4.\5') }}
+    {%- elif group_name is match(regex_find_azure_bastion_ip) -%}
+      {{ group_name | regex_replace(regex_find_azure_bastion_ip, '\2.\3.\4.\5') }}
+    {%- endif -%}
+  {%- endfor -%}
+ansible_ssh_common_args: "-o 'ProxyJump {{ bastion_user }}@{{ group_based_bastion_ip }}'"
+ansible_host: "{{ ec2_private_ip_address | default(private_ip_address | default(ansible_host)) }}"
+bastion_host: |-
+  {%- for host in hostvars | dict2items -%}
+    {%- if host.value.ec2_ip_address | default('') == group_based_bastion_ip | default('0.0.0.0') -%}{{ host.key }}{%- endif -%}
+    {%- if host.value.public_ip | default('') == group_based_bastion_ip | default('0.0.0.0') -%}{{ host.key }}{%- endif -%}
+  {%- endfor -%}

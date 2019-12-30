@@ -1,0 +1,36 @@
+---
+- name: Check we have a CA Server
+  assert:
+    that: "ca_server is defined"
+    fail_msg: "No CA Server [ca_server] is defined"
+    success_msg: "Using CA Server [{{ ca_server | default('') }}]"
+
+- name: Add CA Server
+  add_host:
+    name: "{{ ca_server }}"
+    groups: NebulaCA
+    ansible_user: "{{ ca_user | default('ubuntu') }}"
+  when: hostvars[ca_server] is not defined
+
+- name: Get platform binary
+  unarchive:
+    src: "https://github.com/slackhq/nebula/releases/download/{{ release }}/nebula-{{ item }}.tar.gz"
+    dest: /tmp/
+    remote_src: yes
+  delegate_to: localhost
+  run_once: yes
+  loop:
+  - linux-amd64
+  - windows-amd64
+  vars:
+    release: v1.0.0
+
+- name: Load Linux Instructions
+  include_tasks: linux.yml
+  when: "'debian' in ansible_os_family | lower or 'redhat' in ansible_os_family | lower"
+
+- name: Load Windows Instructions
+  include_tasks: windows.yml
+  when:
+  - "'debian' not in ansible_os_family | lower"
+  - "'redhat' not in ansible_os_family | lower"

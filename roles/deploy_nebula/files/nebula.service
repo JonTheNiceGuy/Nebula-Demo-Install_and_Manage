@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the Nebula Overlay Network Service
+After=network.target
+
+[Service]
+Type=simple
+Restart=on-failure
+WorkingDirectory=/etc/Nebula/
+ExecStartPre=/opt/Nebula/nebula -config /etc/Nebula/config.yml -test
+ExecStart=/opt/Nebula/nebula -config /etc/Nebula/config.yml
+
+[Install]
+WantedBy=multi-user.target

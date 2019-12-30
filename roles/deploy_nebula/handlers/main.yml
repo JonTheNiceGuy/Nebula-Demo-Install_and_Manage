@@ -1,0 +1,13 @@
+---
+- name: SystemD Reload
+  become: true
+  systemd:
+    daemon_reload: yes
+  notify: Restart Nebula
+
+- name: Restart Nebula
+  become: true
+  systemd:
+    name: nebula.service
+    enabled: yes
+    state: restarted

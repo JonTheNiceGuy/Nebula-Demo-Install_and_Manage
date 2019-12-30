@@ -1,0 +1,48 @@
+---
+nebula_ip: |-
+  {%- for group_name in group_names | default([]) -%}
+    {%- if group_name is match(regex_match_ec2_nebula_ip_mask_tag) -%}
+      {{ group_name | regex_replace(regex_match_ec2_nebula_ip_mask_tag, '\2.\3.\4.\5/\6') }}
+    {%- elif group_name is match(regex_match_azure_nebula_ip_mask_tag) -%}
+      {{ group_name | regex_replace(regex_match_azure_nebula_ip_mask_tag, '\2.\3.\4.\5/\6') }}
+    {%- endif -%}
+  {%- endfor -%}
+lighthouse: |-
+  {%- for group_name in group_names | default([]) -%}
+    {%- if group_name is match(regex_match_ec2_nebula_lighthouse_tag) -%}
+      {{ "true" | bool }}
+    {%- elif group_name is match(regex_match_azure_nebula_lighthouse_tag) -%}
+      {{ "true" | bool }}
+    {%- endif -%}
+  {%- endfor -%}
+is_lighthouse: "{{ lighthouse | default('false') | bool }}"
+lighthouses: |
+  [
+    {%- for a_group in groups | dict2items -%}
+      {%- if a_group.key == 'tag_Nebula_lighthouse_true' or a_group.key == 'Nebula_lighthouse_true' -%}
+        {%- for a_host in a_group.value -%}
+          {
+            {%- for hostvar in hostvars[a_host] | dict2items -%}
+              {%- if hostvar.key == "ec2_tag_Nebula_ip" -%}
+                "ip": "{{ hostvar.value | ipaddr('address') }}",
+              {%- elif hostvar.key == "ec2_ip_address" -%}
+                "public_address": "{{ hostvar.value }}",
+              {%- elif hostvar.key == "ec2_tag_Nebula_port" -%}
+                "port": "{{ hostvar.value }}",
+              {%- elif hostvar.key == "public_ip" and hostvar.value != "null" -%}
+                "public_address": "{{ hostvar.value }}",
+              {%- elif hostvar.key == "tags" -%}
+                {%- for tagvar in hostvar.value | dict2items -%}
+                  {%- if hostvar.key == "Nebula_ip" -%}
+                    "ip": "{{ hostvar.value | ipaddr('address') }}",
+                  {%- elif hostvar.key == "Nebula_port" -%}
+                    "port": "{{ hostvar.value }}",
+                  {%- endif -%}
+                {%- endfor -%}
+              {%- endif -%}
+            {%- endfor -%}
+          },
+        {%- endfor -%}
+      {%- endif -%}
+    {%- endfor -%}
+  ]

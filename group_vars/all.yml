@@ -1,0 +1,6 @@
+all_inbound_rules:
+- proto: icmp
+  group: any
+- proto: tcp
+  port: 22
+  group: management

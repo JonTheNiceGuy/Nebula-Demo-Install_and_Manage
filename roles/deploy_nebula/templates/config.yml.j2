@@ -1,0 +1,157 @@
+pki:
+  ca: {{ config_dir | default('/etc/Nebula/') }}ca.crt
+  cert: {{ config_dir | default('/etc/Nebula/') }}{{ inventory_hostname }}.crt
+  key: {{ config_dir | default('/etc/Nebula/') }}{{ inventory_hostname }}.key
+{% if blacklisted_certs is defined %}
+  blacklist:
+{% for blacklisted_item in blacklisted_certs %}
+    - {{ blacklisted_item }}
+{% endfor %}
+{% endif %}
+
+static_host_map:
+{% if not is_lighthouse %}
+{% for lh in lighthouses %}
+{% if lh.ip is defined and lh.public_address is defined %}
+      "{{ lh.ip }}": ["{{ lh.public_address }}:{{ lh.port | default(nebula_port | default(4242)) }}"]
+{% endif %}
+{% endfor %}
+{% endif %}
+
+lighthouse:
+  am_lighthouse: {{ is_lighthouse }}
+{% if serve_dns | default(true) | bool %}
+  serve_dns: true
+  dns:
+    host: {{ dns_host | default('127.0.42.42') }}
+{% if dns_port is defined %}
+    port: {{ dns_port | default('53') }}
+{% endif %}
+{% endif %}
+  interval: 60
+  hosts:
+{% if not is_lighthouse %}
+{% for lh in lighthouses %}
+{% if lh.ip is defined %}
+    - "{{ lh.ip }}"
+{% endif %}
+{% endfor %}
+{% endif %}
+
+listen:
+  host: {{ listen_ip | default('0.0.0.0') }}
+  port: {{ listen_port | default(4242) }}
+
+punchy: {{ punchy | default(true) | string }}
+punch_back: {{ punch_back | default(true) | string }}
+local_range: "{{ (ansible_default_ipv4.network + '/' + ansible_default_ipv4.netmask) | ipaddr('net') }}"
+
+{% if sshd | default(false) %}
+sshd:
+  enabled: true
+  listen: {{ sshd_ip | default('127.0.0.1') }}{{ sshd_port | default(2222) }}
+  host_key: ./ssh_host_ed25519_key
+  authorized_users:
+{% for user in sshd_users | default([]) %}
+{% if user.name is defined and user.keys is defined %}
+    - user: {{ user.name }}
+      keys:
+{% for key in user.keys %}
+        - "{{ key }}"
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+tun:
+  dev: {{ tun_name | default('nebula1') }}
+  drop_local_broadcast: {{ drop_broadcast | default('false') }}
+  drop_multicast: {{ drop_multicast | default('false') }}
+  tx_queue: {{ tx_queue | default(500) }}
+  mtu: {{ mtu | default(1300) }}
+  routes:
+{% for route in mtu_routes | default([])  %}
+{% if route.cidr is defined %}
+    - mtu: {{ route.mtu | default(1500) }}
+      route: {{ route.cidr }}
+{% endif %}
+{% endfor %}
+  unsafe_routes:
+{% for route in unsafe_routes | default([]) %}
+{% if route.cidr is defined and route.via is defined %}
+    - route: {{ route.cidr }}
+      via: {{ route.via }}
+{% if route.mtu is defined %}
+      mtu: {{ route.mtu }}
+{% endif %}
+{% endif %}
+{% endfor %}
+
+logging:
+  level: {{ log_level | default('info') }}
+  format: {{ log_type | default('text') }}
+
+{% if stats.graphite is defined or stats.prometheus is defined %}
+stats:
+{% if stats.graphite is defined %}
+  type: graphite
+  prefix: {{ stats.graphite.prefix | default('nebula') }}
+  protocol: {{ stats.graphite.protocol | default('tcp') }}
+  host: {{ stats.graphite.host | default(stats.host | default('127.0.0.1:9999')) }}
+  interval: {{ stats.graphite.interval | default(stats.interval | default('10s')) }}
+{% elif stats.prometheus is defined %}
+  type: prometheus
+  listen: {{ stats.prometheus.host | default(stats.host | default('127.0.0.1:8080')) }}
+  path: {{ stats.prometheus.path | default('/metrics') }}
+  namespace: {{ stats.prometheus.namespace | default('prometheusns') }}
+  subsystem: {{ stats.prometheus.subsystem | default('nebula') }}
+  interval: {{ stats.prometheus.interval | default(stats.interval | default('10s')) }}
+{% endif %}
+{% endif %}
+
+firewall:
+  conntrack:
+    tcp_timeout: 120h
+    udp_timeout: 3m
+    default_timeout: 10m
+    max_connections: 100000
+  outbound:
+{% for rule in outbound_rules_ROLE_INTERNAL_computed | default([]) %}
+    - port: {{ rule.port | default("any") }}
+      proto: {{ rule.proto | default("any") }}
+{% if rule.host is defined %}
+      host: {{ rule.host }}
+{% elif rule.group is defined %}
+      group: {{ rule.group }}
+{% elif rule.groups is defined %}
+      groups: {{ rule.groups }}
+{% elif rule.cidr is defined %}
+      cidr: {{ rule.cidr }}
+{% elif rule.ca_name is defined %}
+      ca_name: {{ rule.ca_name }}
+{% elif rule.ca_sha is defined %}
+      ca_sha: {{ rule.ca_sha }}
+{% else %}
+      host: any
+{% endif %}
+{% endfor %}
+  inbound:
+{% for rule in inbound_rules_ROLE_INTERNAL_computed | default([]) %}
+    - port: {{ rule.port | default("any") }}
+      proto: {{ rule.proto | default("any") }}
+{% if rule.host is defined %}
+      host: {{ rule.host }}
+{% elif rule.group is defined %}
+      group: {{ rule.group }}
+{% elif rule.groups is defined %}
+      groups: {{ rule.groups }}
+{% elif rule.cidr is defined %}
+      cidr: {{ rule.cidr }}
+{% elif rule.ca_name is defined %}
+      ca_name: {{ rule.ca_name }}
+{% elif rule.ca_sha is defined %}
+      ca_sha: {{ rule.ca_sha }}
+{% else %}
+      host: any
+{% endif %}
+{% endfor %}

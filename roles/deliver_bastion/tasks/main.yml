@@ -1,0 +1,31 @@
+---
+# Based on https://github.com/ansible/awx/issues/2279#issuecomment-462033160
+- name: "Ensure SSH private key is installed on AWX server"
+  local_action:
+    module: template
+    src: id_rsa
+    dest: /root/.ssh/id_rsa
+    mode: 0600
+  run_once: true
+  changed_when: false
+
+- name: "Ensure Bastion Users are created on the Bastion host"
+  delegate_to: "{{ bastion_host }}"
+  become: true
+  user:
+    name: "{{ bastion_user | default(ansible_user) }}"
+    create_home: yes
+    home: "/home/{{ bastion_user | default(ansible_user) }}"
+    shell: "{% if bastion_user | default(ansible_user) == ansible_user %}{{ omit }}{% else %}/bin/nologin{% endif %}"
+
+- name: "Ensure SSH Public key is installed on Bastion host"
+  delegate_to: "{{ bastion_host }}"
+  become: true
+  authorized_key:
+    user: "{{ bastion_user | default(ansible_user) }}"
+    state: present
+    key: "{{ item }}"
+  with_file:
+  - files/id_rsa.pub
+  loop_control:
+    label: "id_rsa.pub"

@@ -1,0 +1,5 @@
+database_inbound_rules:
+- proto: tcp
+  port: 3306
+  groups:
+  - web
